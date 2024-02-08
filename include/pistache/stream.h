@@ -85,18 +85,15 @@ namespace Pistache
 
         explicit ArrayStreamBuf(size_t maxSize)
             : StreamBuf<CharT>()
-            , bytes()
             , maxSize_(maxSize)
         {
-            bytes.clear();
             Base::setg(bytes.data(), bytes.data(), bytes.data() + bytes.size());
         }
 
         template <size_t M>
         explicit ArrayStreamBuf(char (&arr)[M])
         {
-            bytes.clear();
-            std::copy(arr, arr + M, std::back_inserter(bytes));
+            bytes.assign(arr, arr + M);
             Base::setg(bytes.data(), bytes.data(), bytes.data() + bytes.size());
         }
 
@@ -108,7 +105,7 @@ namespace Pistache
             }
             // persist current offset
             size_t readOffset = static_cast<size_t>(this->gptr() - this->eback());
-            std::copy(data, data + len, std::back_inserter(bytes));
+            bytes.insert(bytes.end(), data, data + len);
             Base::setg(bytes.data(), bytes.data() + readOffset,
                        bytes.data() + bytes.size());
             return true;
