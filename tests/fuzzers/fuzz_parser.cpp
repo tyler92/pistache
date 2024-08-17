@@ -9,8 +9,7 @@
 
 using namespace Pistache;
 
-template <class F>
-void ignoreExceptions(const F& func)
+void ignoreExceptions(const std::function<void()>& func)
 {
     try
     {
@@ -21,18 +20,17 @@ void ignoreExceptions(const F& func)
     }
 }
 
-template <class T>
-void parseHttpHeader(const std::string& input)
+void parseHttpHeader(const std::string& name, const std::string& input)
 {
-    T header;
-    ignoreExceptions([&] { header.parse(input); });
+    auto header = Pistache::Http::Header::Registry::instance().makeHeader(name);
+    ignoreExceptions([&] { header->parse(input); });
+    ignoreExceptions([&] { header->parseRaw(input.data(), input.size()); });
 
     std::stringstream oss;
-    header.write(oss);
+    header->write(oss);
 }
 
-template <>
-void parseHttpHeader<Pistache::Http::Header::Authorization>(const std::string& input)
+void parseAuthorizationHeader(const std::string& input)
 {
     Pistache::Http::Header::Authorization header;
     ignoreExceptions([&] { header.parse(input); });
@@ -43,25 +41,17 @@ void parseHttpHeader<Pistache::Http::Header::Authorization>(const std::string& i
             const auto password = header.getBasicPassword();
             header.setBasicUserPassword(user, password);
         });
-
-    std::stringstream oss;
-    header.write(oss);
 }
 
 void fuzz_headers(const std::string& input)
 {
-    parseHttpHeader<Pistache::Http::Header::Accept>(input);
-    parseHttpHeader<Pistache::Http::Header::CacheControl>(input);
-    parseHttpHeader<Pistache::Http::Header::Connection>(input);
-    parseHttpHeader<Pistache::Http::Header::AcceptEncoding>(input);
-    parseHttpHeader<Pistache::Http::Header::ContentEncoding>(input);
-    parseHttpHeader<Pistache::Http::Header::ContentLength>(input);
-    parseHttpHeader<Pistache::Http::Header::ContentType>(input);
-    parseHttpHeader<Pistache::Http::Header::Authorization>(input);
-    parseHttpHeader<Pistache::Http::Header::Date>(input);
-    parseHttpHeader<Pistache::Http::Header::Expect>(input);
-    parseHttpHeader<Pistache::Http::Header::Host>(input);
-    parseHttpHeader<Pistache::Http::Header::Server>(input);
+    for (const auto& header : Pistache::Http::Header::Registry::instance().headersList())
+    {
+        parseHttpHeader(header, input);
+    }
+
+    // Special cases
+    parseAuthorizationHeader(input);
 }
 
 void fuzz_cookies(const std::string& input)
