@@ -15,6 +15,8 @@
 #include PST_SOCKET_HDR // best in C/C++, not .h, for non-test code
 
 #include <sys/types.h>
+#include <unistd.h>
+#include <thread>
 
 // In CLIENT_TRY, note that strerror is allowed to change errno in certain
 // circumstances, so we must save errno in lastErrno_ BEFORE we call strerror
@@ -62,6 +64,11 @@ namespace Pistache
     class TcpClient
     {
     public:
+        ~TcpClient()
+        {
+            close(fd_);
+        }
+
         bool connect(const Pistache::Address& address)
         {
             struct addrinfo hints = {};
