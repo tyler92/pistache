@@ -355,7 +355,7 @@ namespace Pistache::Http::Experimental
         PS_TIMEDBG_START_THIS;
 
         return Async::Promise<void>(
-            [=](Async::Resolver& resolve, Async::Rejection& reject) {
+            [&](Async::Resolver& resolve, Async::Rejection& reject) {
                 PS_TIMEDBG_START;
 
                 ConnectionEntry entry(std::move(resolve), std::move(reject), connection,
