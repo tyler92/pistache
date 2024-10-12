@@ -17,6 +17,7 @@
 #include <pistache/peer.h>
 #include <pistache/transport.h>
 
+#include <charconv>
 #include <cstring>
 #include <ctime>
 #include <iomanip>
@@ -456,10 +457,16 @@ namespace Pistache::Http
                     if (!cursor.advance(1))
                         return Incomplete;
 
-                char* end;
-                const char* raw = chunkSize.rawText();
-                auto sz         = std::strtol(raw, &end, 16);
-                if (*end != '\r')
+                const char* raw { chunkSize.rawText() };
+                const auto* end { chunkSize.rawText() + chunkSize.size() };
+
+                size_t sz              = 0;
+                const auto parseResult = std::from_chars(raw, end, sz, 16);
+
+                if (parseResult.ec != std::errc {})
+                    throw std::runtime_error("Invalid chunk size");
+
+                if (*parseResult.ptr != '\r')
                     throw std::runtime_error("Invalid chunk size");
 
                 // CRLF
