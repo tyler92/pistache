@@ -440,6 +440,7 @@ namespace Pistache::Http
             // This is the first time we are reading the payload
             else
             {
+                if (contentLength > 1000000) throw std::bad_alloc();
                 message->body_.reserve(contentLength);
                 if (!readBody(contentLength))
                     return State::Again;
@@ -482,6 +483,7 @@ namespace Pistache::Http
             if (size == 0)
                 return Final;
 
+            if (size > 1000000) throw std::bad_alloc();
             message->body_.reserve(size);
             StreamCursor::Token chunkData(cursor);
             const ssize_t available = cursor.remaining();
