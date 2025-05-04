@@ -10,82 +10,59 @@
 #include <pistache/endpoint.h>
 #include <pistache/http.h>
 #include <pistache/router.h>
-#include <pistache/serializer/rapidjson.h>
 
 using namespace Pistache;
 
-class FuzzHandler : public Http::Handler
+class FuzzHandler
 {
-  public:
-    HTTP_PROTOTYPE(FuzzHandler)
-
-    void onRequest(const Http::Request& request, Http::ResponseWriter writer) override
+public:
+    void echo(const Rest::Request& req, Http::ResponseWriter writer)
     {
-        std::string requestAddress = request.address().host();
-        writer.send(Http::Code::Ok, requestAddress);
-    }
-
-    void ping(const Rest::Request&, Http::ResponseWriter writer)
-    {
-        writer.send(Http::Code::Ok, "pong");
+        writer.send(Http::Code::Ok, req.body());
     }
 };
 
-void sendPingRequest(const Address& address)
+void sendRequest(const Address& address)
 {
     Http::Experimental::Client httpClient;
-    httpClient.init();
-    auto response = httpClient.get(address.host() + ":" + address.port().toString() + "/ping").send();
+    httpClient.init(Http::Experimental::Client::Options().maxConnectionsPerHost(1));
+    auto response = httpClient.get(address.host() + ":" + address.port().toString() + "/echo").send();
     Async::Barrier<Http::Response> barrier(response);
     barrier.wait_for(std::chrono::seconds(1));
     httpClient.shutdown();
 }
 
+Rest::Router setupRouter(FuzzHandler& handler)
+{
+    Rest::Router router;
+    Rest::Routes::Get(router, "/echo", Rest::Routes::bind(&FuzzHandler::echo, &handler));
+    Rest::Routes::Post(router, "/echo", Rest::Routes::bind(&FuzzHandler::echo, &handler));
+    Rest::Routes::Head(router, "/echo", Rest::Routes::bind(&FuzzHandler::echo, &handler));
+    Rest::Routes::Patch(router, "/echo", Rest::Routes::bind(&FuzzHandler::echo, &handler));
+    Rest::Routes::Delete(router, "/echo", Rest::Routes::bind(&FuzzHandler::echo, &handler));
+    return router;
+}
+
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
 {
-    // Initialize dummy routes
+    // Initialize routes
     FuzzHandler handler;
-    Rest::Description desc("SwaggerEndpoint API", "1.0");
-    desc.route("/api", Http::Method::Get)
-        .bind(&FuzzHandler::onRequest, &handler)
-        .consumes(MIME(Text, Json))
-        .parameter<int>("id", "ID")
-        .response(Http::Code::Ok, "Ok")
-        .produces(MIME(Text, Json));
-
-    Rest::Router router = Rest::Router::fromDescription(desc);
-    Rest::Routes::Get(router, "/ping", Rest::Routes::bind(&FuzzHandler::ping, &handler));
-    Rest::Routes::Post(router, "/ping", Rest::Routes::bind(&FuzzHandler::ping, &handler));
-    Rest::Routes::Head(router, "/ping", Rest::Routes::bind(&FuzzHandler::ping, &handler));
-    Rest::Routes::Patch(router, "/ping", Rest::Routes::bind(&FuzzHandler::ping, &handler));
-    Rest::Routes::Delete(router, "/ping", Rest::Routes::bind(&FuzzHandler::ping, &handler));
-
-    Rest::Swagger swagger(desc);
-    swagger.apiPath("/doc")
-        .uiPath("status")
-        .uiDirectory("/proc/self")
-        .serializer(&Rest::Serializer::rapidJson)
-        .install(router);
+    Rest::Router router = setupRouter(handler);
 
     // Initialize server
-    const Address address(IP::loopback(), Port(0));
-    Http::Endpoint server(address);
+    Http::Endpoint server(Address(IP::loopback(), Port(0)));
+    server.init(Http::Endpoint::options().flags(Tcp::Options::ReuseAddr | Tcp::Options::NoDelay));
     server.setHandler(router.handler());
-
-    const auto flags = Tcp::Options::ReuseAddr | Tcp::Options::NoDelay;
-    const auto server_opts = Http::Endpoint::options().flags(flags);
-    server.init(server_opts);
     server.serveThreaded();
 
     // Main fuzzing target: send raw message via TCP
-    auto tcpClient = std::make_unique<TcpClient>();
-    tcpClient->connect(Address(address.host(), server.getPort()));
-    tcpClient->send(std::string(reinterpret_cast<const char*>(data), size));
+    TcpClient tcpClient;
+    tcpClient.connect(Address(IP::loopback(), server.getPort()));
+    tcpClient.send(reinterpret_cast<const char*>(data), size);
 
-    // A deterministic GET request to make sure the previous request consumed
-    sendPingRequest(Address(address.host(), server.getPort()));
+    // A deterministic GET request to make sure the previous request was consumed
+    sendRequest(Address(IP::loopback(), server.getPort()));
 
-    tcpClient.reset();
     server.shutdown();
     return 0;
 }
