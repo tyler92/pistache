@@ -450,6 +450,7 @@ namespace Pistache::Http
             // This is the first time we are reading the payload
             else
             {
+		    if (contentLength > 100000) return State::Done;
                 message->body_.reserve(
                     static_cast<unsigned int>(contentLength));
                 if (!readBody(static_cast<size_t>(contentLength)))
@@ -490,7 +491,7 @@ namespace Pistache::Http
                 alreadyAppendedChunkBytes = 0;
             }
 
-            if (size == 0)
+            if (size == 0 || size > 100000)
                 return Final;
 
             message->body_.reserve(size);
