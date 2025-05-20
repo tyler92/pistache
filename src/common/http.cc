@@ -491,7 +491,7 @@ namespace Pistache::Http
                 alreadyAppendedChunkBytes = 0;
             }
 
-            if (size == 0 || size > 100000)
+            if (size == 0 || size > 100000 || size < 0)
                 return Final;
 
             message->body_.reserve(size);
